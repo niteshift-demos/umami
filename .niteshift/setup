@@ -15,6 +15,12 @@ timeout 180 bash -c 'until docker exec umami-db pg_isready -U umami -d umami >/d
 pnpm build-db
 pnpm check-db
 
+# Demo Blog + Demo SaaS analytics data. Skipped when the database already has websites, so a
+# rerun does not duplicate the demo sites or touch websites created during a task.
+if [ "$(docker exec umami-db psql -U umami -d umami -tAc 'select count(*) from website')" = "0" ]; then
+  pnpm seed-data
+fi
+
 # Runtime assets the dev server serves as-is. Script target only: build-tracker-types rewrites a tracked file.
 pnpm build-tracker-script
 pnpm build-recorder

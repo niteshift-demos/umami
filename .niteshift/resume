@@ -10,3 +10,9 @@ ns services start db
 timeout 180 bash -c 'until docker exec umami-db pg_isready -U umami -d umami >/dev/null 2>&1; do sleep 2; done'
 
 pnpm check-db
+
+# Demo Blog + Demo SaaS analytics data. Skipped when the database already has websites, so a
+# rerun does not duplicate the demo sites or touch websites created during a task.
+if [ "$(docker exec umami-db psql -U umami -d umami -tAc 'select count(*) from website')" = "0" ]; then
+  pnpm seed-data
+fi
