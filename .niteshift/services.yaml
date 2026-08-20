@@ -1,0 +1,27 @@
+services:
+  - name: db
+    command: |
+      docker rm -f umami-db >/dev/null 2>&1 || true
+      exec docker run --rm --name umami-db \
+        -p 127.0.0.1:5432:5432 \
+        -e POSTGRES_DB=umami \
+        -e POSTGRES_USER=umami \
+        -e POSTGRES_PASSWORD=umami \
+        -v umami-db-data:/var/lib/postgresql/data \
+        postgres:15-alpine
+    stopGracePeriod: 30s
+  - name: web
+    command: pnpm dev
+    port: 3000
+
+envFiles:
+  - path: .env
+    environment:
+      - name: DATABASE_URL
+        value: postgresql://umami:umami@127.0.0.1:5432/umami
+      - name: APP_SECRET
+        value: niteshift-umami-dev-app-secret
+      - name: ALLOWED_FRAME_URLS
+        value: https://niteshift.dev https://*.niteshift.dev
+      - name: DISABLE_TELEMETRY
+        value: "1"

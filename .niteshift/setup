@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+cd "$(dirname "$0")/.."
+
+# `ns services up` renders .env from services.yaml after setup; these steps need the URL now.
+export DATABASE_URL="postgresql://umami:umami@127.0.0.1:5432/umami"
+
+pnpm install --frozen-lockfile
+
+ns services start db
+timeout 180 bash -c 'until docker exec umami-db pg_isready -U umami -d umami >/dev/null 2>&1; do sleep 2; done'
+
+# Prisma client, then connection check + `prisma migrate deploy`, which also creates the admin user.
+pnpm build-db
+pnpm check-db
+
+# Runtime assets the dev server serves as-is. Script target only: build-tracker-types rewrites a tracked file.
+pnpm build-tracker-script
+pnpm build-recorder
+pnpm build-geo

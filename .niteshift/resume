@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+cd "$(dirname "$0")/.."
+
+# The Postgres data volume does not always survive a resume; migrate deploy is a no-op when it did.
+export DATABASE_URL="postgresql://umami:umami@127.0.0.1:5432/umami"
+
+ns services start db
+timeout 180 bash -c 'until docker exec umami-db pg_isready -U umami -d umami >/dev/null 2>&1; do sleep 2; done'
+
+pnpm check-db
