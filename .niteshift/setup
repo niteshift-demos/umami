@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+DATABASE_URL='postgresql://umami:umami@localhost:5432/umami'
+PSQL='docker compose -f docker-compose.yml -f .niteshift/files/docker-compose.niteshift.yml exec -T db psql -U umami -d umami'
+
+pnpm install --frozen-lockfile
+
+cat > .env <<ENV
+DATABASE_URL=$DATABASE_URL
+APP_SECRET=niteshift-dev-app-secret
+ALLOWED_FRAME_URLS=https://niteshift.dev https://*.niteshift.dev
+ALLOWED_DEV_ORIGINS=*.preview.niteshift.dev
+ENV
+
+ns services start db
+timeout 300 bash -c 'until docker compose -f docker-compose.yml -f .niteshift/files/docker-compose.niteshift.yml exec -T db pg_isready -U umami -d umami >/dev/null 2>&1; do sleep 2; done'
+
+pnpm build-db
+pnpm check-db
+
+# Migrations create the admin/umami login; seed demo websites so the dashboards render.
+if [ "$($PSQL -tAc 'select count(*) from website' | tr -d '[:space:]')" = '0' ]; then
+  pnpm seed-data
+fi

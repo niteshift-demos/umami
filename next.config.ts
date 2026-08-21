@@ -20,6 +20,10 @@ const corsMaxAge = process.env.CORS_MAX_AGE || '';
 const defaultCurrency = process.env.DEFAULT_CURRENCY || '';
 const defaultLocale = process.env.DEFAULT_LOCALE || '';
 const forceSSL = process.env.FORCE_SSL || '';
+const allowedDevOrigins = (process.env.ALLOWED_DEV_ORIGINS || '')
+  .split(',')
+  .map(origin => origin.trim())
+  .filter(Boolean);
 const trackerScriptName = process.env.TRACKER_SCRIPT_NAME || '';
 const trackerScriptURL = process.env.TRACKER_SCRIPT_URL || '';
 const selfTrack = process.env.UMAMI_SELF_TRACK || '';
@@ -208,6 +212,7 @@ if (isProd && cloudMode) {
 /** @type {import('next').NextConfig} */
 export default withNextIntl({
   reactStrictMode: false,
+  allowedDevOrigins,
   env: {
     apiUrl,
     basePath,
