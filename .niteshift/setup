@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+cd "$(dirname "$0")/.."
+
+pnpm install --frozen-lockfile
+pnpm exec playwright install chromium
+
+# Umami reads .env through dotenv (next.config.ts, prisma.config.ts, pnpm dev).
+# The database is task-local and APP_SECRET only signs sessions in this sandbox.
+if [ ! -f .env ]; then
+  cat > .env <<'ENV'
+DATABASE_URL=postgresql://umami:umami@localhost:5432/umami
+APP_SECRET=niteshift-dev-app-secret
+ALLOWED_FRAME_URLS=https://niteshift.dev https://*.niteshift.dev
+ALLOWED_DEV_ORIGINS=*.preview.niteshift.dev
+DISABLE_TELEMETRY=1
+ENV
+fi
+
+pnpm build-db
+.niteshift/files/bootstrap-db.sh
+
+# public/script.js and public/recorder.js are gitignored build outputs the app serves.
+pnpm build-tracker-script
+pnpm build-recorder

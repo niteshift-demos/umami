@@ -1,0 +1,9 @@
+---
+# Niteshift override: only the database runs locally; the app runs from source
+# via `pnpm dev`, so publish Postgres to the host and keep the container from
+# restarting itself outside the supervisor.
+services:
+  db:
+    ports:
+      - "5432:5432"
+    restart: unless-stopped

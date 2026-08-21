@@ -1,0 +1,8 @@
+---
+services:
+  - name: postgres
+    command: docker compose -f docker-compose.yml -f .niteshift/files/docker-compose.niteshift.yml up db
+    stopGracePeriod: 30s
+  - name: web
+    command: pnpm dev
+    port: 3000
