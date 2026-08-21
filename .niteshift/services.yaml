@@ -23,5 +23,7 @@ envFiles:
         value: niteshift-umami-dev-app-secret
       - name: ALLOWED_FRAME_URLS
         value: https://niteshift.dev https://*.niteshift.dev
+      - name: ALLOWED_DEV_ORIGINS
+        value: "*.preview.niteshift.dev"
       - name: DISABLE_TELEMETRY
         value: "1"
