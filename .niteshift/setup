@@ -1,0 +1,37 @@
+#!/usr/bin/env bash
+# Fresh-sandbox setup for Umami: install, generate the Prisma client, build the
+# tracker/recorder/geo assets, then start Postgres and apply migrations.
+set -euo pipefail
+
+cd "$NITESHIFT_CHECKOUT_ROOT/umami"
+
+export DATABASE_URL="postgresql://umami:umami@localhost:5432/umami"
+export DISABLE_TELEMETRY=1
+export NEXT_TELEMETRY_DISABLED=1
+
+pnpm install --frozen-lockfile
+
+# Prisma client (src/generated + generated/prisma/client.js used by scripts)
+pnpm build-db
+
+# Static assets served by the app in development (both outputs are gitignored).
+# `build-tracker` also regenerates the tracked src/tracker/index.d.ts, so only
+# the script bundle is built here.
+pnpm build-tracker-script
+pnpm build-recorder
+
+# GeoLite2 database used for visitor location lookups (geo/ is gitignored)
+pnpm build-geo
+
+# Start the declared Postgres service early so migrations can run now.
+ns services start db
+for _ in $(seq 1 60); do
+  if docker exec umami-db pg_isready -h 127.0.0.1 -U umami -d umami >/dev/null 2>&1; then
+    break
+  fi
+  sleep 1
+done
+docker exec umami-db pg_isready -h 127.0.0.1 -U umami -d umami
+
+# Connectivity/version check + `prisma migrate deploy` (creates the admin/umami user on first run)
+pnpm check-db

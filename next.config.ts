@@ -24,6 +24,12 @@ const trackerScriptName = process.env.TRACKER_SCRIPT_NAME || '';
 const trackerScriptURL = process.env.TRACKER_SCRIPT_URL || '';
 const selfTrack = process.env.UMAMI_SELF_TRACK || '';
 const selfRecord = process.env.UMAMI_SELF_RECORD || '';
+// Comma-separated hostnames (wildcards allowed) permitted to load dev-server assets,
+// e.g. when the dev server is reached through a remote preview proxy.
+const allowedDevOrigins = (process.env.ALLOWED_DEV_ORIGINS || '')
+  .split(',')
+  .map(origin => origin.trim())
+  .filter(Boolean);
 
 function isRelativeUrl(url: string) {
   return Boolean(url && !/^https?:\/\//i.test(url));
@@ -220,6 +226,7 @@ export default withNextIntl({
     selfRecord,
   },
   basePath,
+  allowedDevOrigins: allowedDevOrigins.length ? allowedDevOrigins : undefined,
   output: isVercel ? undefined : 'standalone',
   typescript: {
     ignoreBuildErrors: true,
