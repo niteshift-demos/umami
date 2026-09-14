@@ -1,12 +1,13 @@
 /* eslint-disable no-console */
 import 'dotenv/config';
 import { PrismaPg } from '@prisma/adapter-pg';
-import { type Prisma, PrismaClient } from '../../src/generated/prisma/client.js';
+import { PrismaClient } from '../../src/generated/prisma/client.js';
 import { getSessionCountForDay } from './distributions/temporal.js';
 import {
   type EventData,
   type EventDataEntry,
   generateEventsForSession,
+  type SiteConfig,
 } from './generators/events.js';
 import {
   generateRevenueForEvents,
@@ -14,13 +15,6 @@ import {
   type RevenueData,
 } from './generators/revenue.js';
 import { createSessions, type SessionData } from './generators/sessions.js';
-import {
-  BLOG_SESSIONS_PER_DAY,
-  BLOG_WEBSITE_DOMAIN,
-  BLOG_WEBSITE_NAME,
-  getBlogJourney,
-  getBlogSiteConfig,
-} from './sites/blog.js';
 import {
   getSaasJourney,
   getSaasSiteConfig,
@@ -31,12 +25,9 @@ import {
 } from './sites/saas.js';
 import { formatNumber, generateDatesBetween, progressBar, subDays, uuid } from './utils.js';
 
-const BATCH_SIZE = 1000;
-
-type SessionCreateInput = Prisma.SessionCreateManyInput;
-type WebsiteEventCreateInput = Prisma.WebsiteEventCreateManyInput;
-type EventDataCreateInput = Prisma.EventDataCreateManyInput;
-type RevenueCreateInput = Prisma.RevenueCreateManyInput;
+// Rows per INSERT statement. Each statement sends one array parameter per
+// column (via unnest), so the batch size is not bound by the parameter limit.
+const BATCH_SIZE = 5000;
 
 export interface SeedConfig {
   days: number;
@@ -52,69 +43,105 @@ export interface SeedResult {
   revenue: number;
 }
 
-async function batchInsertSessions(
+interface Column<T> {
+  name: string;
+  type: string;
+  get: (row: T) => unknown;
+}
+
+function toDate(value: Date | null | undefined): string | null {
+  return value ? value.toISOString() : null;
+}
+
+/**
+ * Bulk insert using `INSERT ... SELECT * FROM unnest(...)`, which is several
+ * times faster than Prisma's createMany for large seeds. Duplicate primary keys
+ * are ignored, matching `skipDuplicates: true`.
+ */
+async function bulkInsert<T>(
   prisma: PrismaClient,
-  data: SessionCreateInput[],
+  table: string,
+  columns: Column<T>[],
+  rows: T[],
+  label: string,
   verbose: boolean,
 ): Promise<void> {
-  for (let i = 0; i < data.length; i += BATCH_SIZE) {
-    const batch = data.slice(i, i + BATCH_SIZE);
-    await prisma.session.createMany({ data: batch, skipDuplicates: true });
+  const names = columns.map(c => c.name).join(', ');
+  const params = columns.map((c, i) => `$${i + 1}::${c.type}[]`).join(', ');
+  const sql = `insert into ${table} (${names}) select * from unnest(${params}) on conflict do nothing`;
+
+  for (let i = 0; i < rows.length; i += BATCH_SIZE) {
+    const batch = rows.slice(i, i + BATCH_SIZE);
+    const values = columns.map(c => batch.map(c.get));
+
+    await prisma.$executeRawUnsafe(sql, ...values);
+
     if (verbose) {
-      console.log(
-        `  Inserted ${Math.min(i + BATCH_SIZE, data.length)}/${data.length} session records`,
-      );
+      console.log(`  Inserted ${Math.min(i + BATCH_SIZE, rows.length)}/${rows.length} ${label}`);
     }
   }
 }
 
-async function batchInsertEvents(
-  prisma: PrismaClient,
-  data: WebsiteEventCreateInput[],
-  verbose: boolean,
-): Promise<void> {
-  for (let i = 0; i < data.length; i += BATCH_SIZE) {
-    const batch = data.slice(i, i + BATCH_SIZE);
-    await prisma.websiteEvent.createMany({ data: batch, skipDuplicates: true });
-    if (verbose) {
-      console.log(
-        `  Inserted ${Math.min(i + BATCH_SIZE, data.length)}/${data.length} event records`,
-      );
-    }
-  }
-}
+const sessionColumns: Column<SessionData>[] = [
+  { name: 'session_id', type: 'uuid', get: r => r.id },
+  { name: 'website_id', type: 'uuid', get: r => r.websiteId },
+  { name: 'browser', type: 'text', get: r => r.browser },
+  { name: 'os', type: 'text', get: r => r.os },
+  { name: 'device', type: 'text', get: r => r.device },
+  { name: 'screen', type: 'text', get: r => r.screen },
+  { name: 'language', type: 'text', get: r => r.language },
+  { name: 'country', type: 'text', get: r => r.country },
+  { name: 'region', type: 'text', get: r => r.region },
+  { name: 'city', type: 'text', get: r => r.city },
+  { name: 'created_at', type: 'timestamptz', get: r => toDate(r.createdAt) },
+];
 
-async function batchInsertEventData(
-  prisma: PrismaClient,
-  data: EventDataCreateInput[],
-  verbose: boolean,
-): Promise<void> {
-  for (let i = 0; i < data.length; i += BATCH_SIZE) {
-    const batch = data.slice(i, i + BATCH_SIZE);
-    await prisma.eventData.createMany({ data: batch, skipDuplicates: true });
-    if (verbose) {
-      console.log(
-        `  Inserted ${Math.min(i + BATCH_SIZE, data.length)}/${data.length} eventData records`,
-      );
-    }
-  }
-}
+const eventColumns: Column<EventData>[] = [
+  { name: 'event_id', type: 'uuid', get: r => r.id },
+  { name: 'website_id', type: 'uuid', get: r => r.websiteId },
+  { name: 'session_id', type: 'uuid', get: r => r.sessionId },
+  { name: 'visit_id', type: 'uuid', get: r => r.visitId },
+  { name: 'created_at', type: 'timestamptz', get: r => toDate(r.createdAt) },
+  { name: 'url_path', type: 'text', get: r => r.urlPath },
+  { name: 'url_query', type: 'text', get: r => r.urlQuery },
+  { name: 'utm_source', type: 'text', get: r => r.utmSource },
+  { name: 'utm_medium', type: 'text', get: r => r.utmMedium },
+  { name: 'utm_campaign', type: 'text', get: r => r.utmCampaign },
+  { name: 'utm_content', type: 'text', get: r => r.utmContent },
+  { name: 'utm_term', type: 'text', get: r => r.utmTerm },
+  { name: 'referrer_path', type: 'text', get: r => r.referrerPath },
+  { name: 'referrer_domain', type: 'text', get: r => r.referrerDomain },
+  { name: 'page_title', type: 'text', get: r => r.pageTitle },
+  { name: 'gclid', type: 'text', get: r => r.gclid },
+  { name: 'fbclid', type: 'text', get: r => r.fbclid },
+  { name: 'event_type', type: 'int', get: r => r.eventType },
+  { name: 'event_name', type: 'text', get: r => r.eventName },
+  { name: 'tag', type: 'text', get: r => r.tag },
+  { name: 'hostname', type: 'text', get: r => r.hostname },
+];
 
-async function batchInsertRevenue(
-  prisma: PrismaClient,
-  data: RevenueCreateInput[],
-  verbose: boolean,
-): Promise<void> {
-  for (let i = 0; i < data.length; i += BATCH_SIZE) {
-    const batch = data.slice(i, i + BATCH_SIZE);
-    await prisma.revenue.createMany({ data: batch, skipDuplicates: true });
-    if (verbose) {
-      console.log(
-        `  Inserted ${Math.min(i + BATCH_SIZE, data.length)}/${data.length} revenue records`,
-      );
-    }
-  }
-}
+const eventDataColumns: Column<EventDataEntry>[] = [
+  { name: 'event_data_id', type: 'uuid', get: r => r.id },
+  { name: 'website_id', type: 'uuid', get: r => r.websiteId },
+  { name: 'website_event_id', type: 'uuid', get: r => r.websiteEventId },
+  { name: 'data_key', type: 'text', get: r => r.dataKey },
+  { name: 'string_value', type: 'text', get: r => r.stringValue },
+  { name: 'number_value', type: 'numeric', get: r => r.numberValue },
+  { name: 'date_value', type: 'timestamptz', get: r => toDate(r.dateValue) },
+  { name: 'data_type', type: 'int', get: r => r.dataType },
+  { name: 'created_at', type: 'timestamptz', get: r => toDate(r.createdAt) },
+];
+
+const revenueColumns: Column<RevenueData>[] = [
+  { name: 'revenue_id', type: 'uuid', get: r => r.id },
+  { name: 'website_id', type: 'uuid', get: r => r.websiteId },
+  { name: 'session_id', type: 'uuid', get: r => r.sessionId },
+  { name: 'event_id', type: 'uuid', get: r => r.eventId },
+  { name: 'event_name', type: 'text', get: r => r.eventName },
+  { name: 'currency', type: 'text', get: r => r.currency },
+  { name: 'revenue', type: 'numeric', get: r => r.revenue },
+  { name: 'created_at', type: 'timestamptz', get: r => toDate(r.createdAt) },
+];
 
 async function findAdminUser(prisma: PrismaClient): Promise<string> {
   const adminUser = await prisma.user.findFirst({
@@ -159,7 +186,7 @@ async function clearDemoData(prisma: PrismaClient): Promise<void> {
 
   const demoWebsites = await prisma.website.findMany({
     where: {
-      OR: [{ name: BLOG_WEBSITE_NAME }, { name: SAAS_WEBSITE_NAME }],
+      name: SAAS_WEBSITE_NAME,
     },
     select: { id: true },
   });
@@ -190,7 +217,7 @@ interface SiteGeneratorConfig {
   name: string;
   domain: string;
   sessionsPerDay: number;
-  getSiteConfig: () => ReturnType<typeof getBlogSiteConfig>;
+  getSiteConfig: () => SiteConfig;
   getJourney: () => string[];
   revenueConfigs?: RevenueConfig[];
 }
@@ -246,19 +273,19 @@ async function generateSiteData(
 
   // Batch insert all data
   console.log(`  Inserting ${formatNumber(allSessions.length)} sessions...`);
-  await batchInsertSessions(prisma, allSessions as SessionCreateInput[], verbose);
+  await bulkInsert(prisma, 'session', sessionColumns, allSessions, 'sessions', verbose);
 
   console.log(`  Inserting ${formatNumber(allEvents.length)} events...`);
-  await batchInsertEvents(prisma, allEvents as WebsiteEventCreateInput[], verbose);
+  await bulkInsert(prisma, 'website_event', eventColumns, allEvents, 'events', verbose);
 
   if (allEventData.length > 0) {
     console.log(`  Inserting ${formatNumber(allEventData.length)} event data entries...`);
-    await batchInsertEventData(prisma, allEventData as EventDataCreateInput[], verbose);
+    await bulkInsert(prisma, 'event_data', eventDataColumns, allEventData, 'event data', verbose);
   }
 
   if (allRevenue.length > 0) {
     console.log(`  Inserting ${formatNumber(allRevenue.length)} revenue entries...`);
-    await batchInsertRevenue(prisma, allRevenue as RevenueCreateInput[], verbose);
+    await bulkInsert(prisma, 'revenue', revenueColumns, allRevenue, 'revenue', verbose);
   }
 
   return {
@@ -322,21 +349,6 @@ export async function seed(config: SeedConfig): Promise<SeedResult> {
     const adminUserId = await findAdminUser(prisma);
     console.log(`  Using admin user: ${adminUserId}`);
 
-    // Generate Blog site (low traffic)
-    const blogResults = await generateSiteData(
-      prisma,
-      {
-        name: BLOG_WEBSITE_NAME,
-        domain: BLOG_WEBSITE_DOMAIN,
-        sessionsPerDay: BLOG_SESSIONS_PER_DAY,
-        getSiteConfig: getBlogSiteConfig,
-        getJourney: getBlogJourney,
-      },
-      days,
-      adminUserId,
-      config.verbose,
-    );
-
     // Generate SaaS site (high traffic)
     const saasResults = await generateSiteData(
       prisma,
@@ -354,11 +366,11 @@ export async function seed(config: SeedConfig): Promise<SeedResult> {
     );
 
     const result: SeedResult = {
-      websites: 2,
-      sessions: blogResults.sessions + saasResults.sessions,
-      events: blogResults.events + saasResults.events,
-      eventData: blogResults.eventData + saasResults.eventData,
-      revenue: blogResults.revenue + saasResults.revenue,
+      websites: 1,
+      sessions: saasResults.sessions,
+      events: saasResults.events,
+      eventData: saasResults.eventData,
+      revenue: saasResults.revenue,
     };
 
     console.log(`\n${'─'.repeat(50)}`);

@@ -1,0 +1,32 @@
+services:
+  - name: web
+    command: pnpm dev
+    port: 3000
+    environment:
+      - name: DATABASE_URL
+        value: postgresql://umami:umami@localhost:5432/umami
+      - name: APP_SECRET
+        value: niteshift-local-dev-secret
+      - name: ALLOWED_FRAME_URLS
+        value: https://niteshift.dev https://*.niteshift.dev
+      - name: ALLOWED_DEV_ORIGINS
+        value: "*.preview.niteshift.dev"
+      - name: DISABLE_TELEMETRY
+        value: "1"
+      - name: NEXT_TELEMETRY_DISABLED
+        value: "1"
+      - name: DEV_LOGIN_USER
+        value: admin
+    auth:
+      type: magic-dev-login-url
+      path: /api/auth/dev-login?returnTo={returnTo}
+  - name: db
+    command: |
+      docker rm -f umami-db >/dev/null 2>&1 || true
+      exec docker run --rm --name umami-db \
+        -p 127.0.0.1:5432:5432 \
+        --shm-size=1g \
+        -e POSTGRES_DB=umami -e POSTGRES_USER=umami -e POSTGRES_PASSWORD=umami \
+        -v umami-db-data:/var/lib/postgresql/data \
+        postgres:15-alpine
+    stopGracePeriod: 30s

@@ -182,4 +182,4 @@ export function getSaasJourney(): string[] {
   return weightedRandom(journeyWeights);
 }
 
-export const SAAS_SESSIONS_PER_DAY = 500;
+export const SAAS_SESSIONS_PER_DAY = 2500;
