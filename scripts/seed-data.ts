@@ -5,9 +5,8 @@
  * Umami Sample Data Generator
  *
  * Generates realistic analytics data for local development and testing.
- * Creates two demo websites:
- *   - Demo Blog: Low traffic (~150 sessions/day)
- *   - Demo SaaS: High traffic (~2,500 sessions/day)
+ * Creates one demo website:
+ *   - Demo SaaS: High traffic (~2,500 sessions/day) with revenue tracking
  *
  * Visitors are spread across every ISO 3166-1 country, with cities, regions and
  * languages that match each country.
@@ -80,8 +79,7 @@ Examples:
   npm run seed-data -- --clear        # Clear existing demo data first
   npm run seed-data -- --days 7 -v    # Generate 7 days with verbose output
 
-Generated Sites:
-  - Demo Blog:  Low traffic (~150 sessions/day)
+Generated Site:
   - Demo SaaS:  High traffic (~2,500 sessions/day) with revenue tracking
 
 Note:

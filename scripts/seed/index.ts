@@ -7,6 +7,7 @@ import {
   type EventData,
   type EventDataEntry,
   generateEventsForSession,
+  type SiteConfig,
 } from './generators/events.js';
 import {
   generateRevenueForEvents,
@@ -14,13 +15,6 @@ import {
   type RevenueData,
 } from './generators/revenue.js';
 import { createSessions, type SessionData } from './generators/sessions.js';
-import {
-  BLOG_SESSIONS_PER_DAY,
-  BLOG_WEBSITE_DOMAIN,
-  BLOG_WEBSITE_NAME,
-  getBlogJourney,
-  getBlogSiteConfig,
-} from './sites/blog.js';
 import {
   getSaasJourney,
   getSaasSiteConfig,
@@ -192,7 +186,7 @@ async function clearDemoData(prisma: PrismaClient): Promise<void> {
 
   const demoWebsites = await prisma.website.findMany({
     where: {
-      OR: [{ name: BLOG_WEBSITE_NAME }, { name: SAAS_WEBSITE_NAME }],
+      name: SAAS_WEBSITE_NAME,
     },
     select: { id: true },
   });
@@ -223,7 +217,7 @@ interface SiteGeneratorConfig {
   name: string;
   domain: string;
   sessionsPerDay: number;
-  getSiteConfig: () => ReturnType<typeof getBlogSiteConfig>;
+  getSiteConfig: () => SiteConfig;
   getJourney: () => string[];
   revenueConfigs?: RevenueConfig[];
 }
@@ -355,21 +349,6 @@ export async function seed(config: SeedConfig): Promise<SeedResult> {
     const adminUserId = await findAdminUser(prisma);
     console.log(`  Using admin user: ${adminUserId}`);
 
-    // Generate Blog site (low traffic)
-    const blogResults = await generateSiteData(
-      prisma,
-      {
-        name: BLOG_WEBSITE_NAME,
-        domain: BLOG_WEBSITE_DOMAIN,
-        sessionsPerDay: BLOG_SESSIONS_PER_DAY,
-        getSiteConfig: getBlogSiteConfig,
-        getJourney: getBlogJourney,
-      },
-      days,
-      adminUserId,
-      config.verbose,
-    );
-
     // Generate SaaS site (high traffic)
     const saasResults = await generateSiteData(
       prisma,
@@ -387,11 +366,11 @@ export async function seed(config: SeedConfig): Promise<SeedResult> {
     );
 
     const result: SeedResult = {
-      websites: 2,
-      sessions: blogResults.sessions + saasResults.sessions,
-      events: blogResults.events + saasResults.events,
-      eventData: blogResults.eventData + saasResults.eventData,
-      revenue: blogResults.revenue + saasResults.revenue,
+      websites: 1,
+      sessions: saasResults.sessions,
+      events: saasResults.events,
+      eventData: saasResults.eventData,
+      revenue: saasResults.revenue,
     };
 
     console.log(`\n${'─'.repeat(50)}`);

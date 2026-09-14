@@ -36,11 +36,11 @@ docker exec umami-db pg_isready -h 127.0.0.1 -U umami -d umami
 # Connectivity/version check + `prisma migrate deploy` (creates the admin/umami user on first run)
 pnpm check-db
 
-# Demo analytics data (two demo websites, ~30 days). Skipped once the demo websites exist.
+# Demo analytics data (Demo SaaS website, 90 days). Skipped once the demo website exists.
 demo_sites=$(docker exec umami-db psql -U umami -d umami -tAc \
-  "select count(*) from website where name in ('Demo Blog', 'Demo SaaS') and deleted_at is null")
+  "select count(*) from website where name = 'Demo SaaS' and deleted_at is null")
 if [ "$demo_sites" = "0" ]; then
   pnpm seed-data
 else
-  echo "Demo websites already present; skipping seed-data"
+  echo "Demo website already present; skipping seed-data"
 fi
