@@ -25,6 +25,7 @@ services:
       docker rm -f umami-db >/dev/null 2>&1 || true
       exec docker run --rm --name umami-db \
         -p 127.0.0.1:5432:5432 \
+        --shm-size=1g \
         -e POSTGRES_DB=umami -e POSTGRES_USER=umami -e POSTGRES_PASSWORD=umami \
         -v umami-db-data:/var/lib/postgresql/data \
         postgres:15-alpine

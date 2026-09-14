@@ -20,7 +20,7 @@ export interface SessionData {
 export function createSession(websiteId: string, day: Date): SessionData {
   const deviceInfo = getRandomDevice();
   const geo = getRandomGeo();
-  const language = getRandomLanguage();
+  const language = getRandomLanguage(geo.country);
   const createdAt = generateTimestampForDay(day);
 
   return {

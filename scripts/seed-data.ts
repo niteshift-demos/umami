@@ -6,12 +6,15 @@
  *
  * Generates realistic analytics data for local development and testing.
  * Creates two demo websites:
- *   - Demo Blog: Low traffic (~100 sessions/month)
- *   - Demo SaaS: Average traffic (~500 sessions/day)
+ *   - Demo Blog: Low traffic (~150 sessions/day)
+ *   - Demo SaaS: High traffic (~2,500 sessions/day)
+ *
+ * Visitors are spread across every ISO 3166-1 country, with cities, regions and
+ * languages that match each country.
  *
  * Usage:
- *   npm run seed-data              # Generate 30 days of data
- *   npm run seed-data -- --days 90 # Generate 90 days of data
+ *   npm run seed-data              # Generate 90 days of data
+ *   npm run seed-data -- --days 30 # Generate 30 days of data
  *   npm run seed-data -- --clear   # Clear existing demo data first
  *   npm run seed-data -- --verbose # Show detailed progress
  */
@@ -22,7 +25,7 @@ function parseArgs(): SeedConfig {
   const args = process.argv.slice(2);
 
   const config: SeedConfig = {
-    days: 30,
+    days: 90,
     clear: false,
     verbose: false,
   };
@@ -72,14 +75,14 @@ Options:
   --help, -h         Show this help message
 
 Examples:
-  npm run seed-data                   # Generate 30 days of data
-  npm run seed-data -- --days 90      # Generate 90 days of data
+  npm run seed-data                   # Generate 90 days of data
+  npm run seed-data -- --days 30      # Generate 30 days of data
   npm run seed-data -- --clear        # Clear existing demo data first
   npm run seed-data -- --days 7 -v    # Generate 7 days with verbose output
 
 Generated Sites:
-  - Demo Blog:  Low traffic (~90 sessions/month)
-  - Demo SaaS:  Average traffic (~500 sessions/day) with revenue tracking
+  - Demo Blog:  Low traffic (~150 sessions/day)
+  - Demo SaaS:  High traffic (~2,500 sessions/day) with revenue tracking
 
 Note:
   This script is blocked from running in production environments

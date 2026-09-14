@@ -105,4 +105,4 @@ export function getBlogJourney(): string[] {
   return weightedRandom(journeyWeights);
 }
 
-export const BLOG_SESSIONS_PER_DAY = 3; // ~90 sessions per month
+export const BLOG_SESSIONS_PER_DAY = 150; // ~4,500 sessions per month
