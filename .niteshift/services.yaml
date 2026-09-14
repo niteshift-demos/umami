@@ -15,9 +15,11 @@ services:
         value: "1"
       - name: NEXT_TELEMETRY_DISABLED
         value: "1"
+      - name: DEV_LOGIN_USER
+        value: admin
     auth:
-      type: cookie-file
-      command: node .niteshift/files/auth.mjs
+      type: magic-dev-login-url
+      path: /api/auth/dev-login?returnTo={returnTo}
   - name: db
     command: |
       docker rm -f umami-db >/dev/null 2>&1 || true
