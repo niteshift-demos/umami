@@ -1,6 +1,8 @@
 import { colord } from 'colord';
 import { THEME_COLORS } from '@/lib/constants';
 
+const MAP_COLOR = '#9256d9';
+
 export function hex6(str: string) {
   let h = 0x811c9dc5; // FNV-1a 32-bit offset
   for (let i = 0; i < str.length; i++) {
@@ -56,7 +58,7 @@ export function getColor(seed: string, min: number = 0, max: number = 255) {
 }
 
 export function getThemeColors(theme: string) {
-  const { primary, text, line, fill } = THEME_COLORS[theme];
+  const { text, line, fill } = THEME_COLORS[theme];
   const primaryColor = colord(THEME_COLORS[theme].primary);
 
   return {
@@ -81,10 +83,10 @@ export function getThemeColors(theme: string) {
         },
       },
       map: {
-        baseColor: primary,
+        baseColor: MAP_COLOR,
         fillColor: fill,
-        strokeColor: primary,
-        hoverColor: primary,
+        strokeColor: MAP_COLOR,
+        hoverColor: MAP_COLOR,
       },
     },
   };
