@@ -56,7 +56,7 @@ export function getColor(seed: string, min: number = 0, max: number = 255) {
 }
 
 export function getThemeColors(theme: string) {
-  const { primary, text, line, fill } = THEME_COLORS[theme];
+  const { text, line } = THEME_COLORS[theme];
   const primaryColor = colord(THEME_COLORS[theme].primary);
 
   return {
@@ -81,10 +81,10 @@ export function getThemeColors(theme: string) {
         },
       },
       map: {
-        baseColor: primary,
-        fillColor: fill,
-        strokeColor: primary,
-        hoverColor: primary,
+        baseColor: '#44b556',
+        fillColor: theme === 'light' ? '#e8f6ea' : '#1a2f1e',
+        strokeColor: '#44b556',
+        hoverColor: '#44b556',
       },
     },
   };

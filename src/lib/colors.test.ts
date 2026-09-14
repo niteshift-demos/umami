@@ -57,7 +57,7 @@ describe('getThemeColors', () => {
     const result = getThemeColors('light');
 
     expect(result.colors.theme).toMatchObject({ primary: '#2680eb' });
-    expect(result.colors.map.baseColor).toBe('#2680eb');
+    expect(result.colors.map.baseColor).toBe('#44b556');
     expect(result.colors.chart.views.backgroundColor).toContain('rgba');
     expect(result.colors.chart.text).toBeDefined();
   });
