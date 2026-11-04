@@ -1,0 +1,106 @@
+#!/usr/bin/env bash
+# Prepares ClickHouse, Kafka and Redis once the clickhouse, kafka and redis services run:
+#   1. creates a Kafka topic for each kind of record Umami writes
+#   2. applies Umami's ClickHouse schema (db/clickhouse/schema.sql)
+#   3. gives each topic a Kafka-engine table and a materialized view, so ClickHouse
+#      consumes what the app sends to Kafka into the table it would otherwise insert into
+#   4. copies the seeded demo data from Postgres into ClickHouse, where the dashboards read it
+# Every step is idempotent.
+set -euo pipefail
+
+cd "$NITESHIFT_CHECKOUT_ROOT/umami"
+
+ch() { docker exec -i umami-clickhouse clickhouse-client --user umami --password umami "$@"; }
+kafka_topics() { docker exec umami-kafka /opt/kafka/bin/kafka-topics.sh --bootstrap-server umami-kafka:29092 "$@"; }
+
+wait_for() {
+  local name=$1
+  shift
+  for _ in $(seq 1 90); do
+    if "$@" >/dev/null 2>&1; then return 0; fi
+    sleep 1
+  done
+  echo "$name did not become ready" >&2
+  "$@"
+}
+
+wait_for clickhouse ch --query "SELECT 1"
+wait_for kafka kafka_topics --list
+wait_for redis docker exec umami-redis redis-cli ping
+
+# Kafka topic -> ClickHouse table. Topic names are the ones src/lib/kafka.ts sends to.
+TOPICS=(
+  "event:website_event"
+  "event_data:event_data"
+  "session_data:session_data"
+  "session_link:session_link"
+  "heatmap_event:heatmap_event"
+  "session_replay:session_replay"
+)
+
+for pair in "${TOPICS[@]}"; do
+  kafka_topics --create --if-not-exists --topic "${pair%%:*}" --partitions 1 --replication-factor 1 >/dev/null
+done
+
+if [ "$(ch --query "EXISTS TABLE umami.website_event")" != "1" ]; then
+  ch --multiquery < db/clickhouse/schema.sql
+fi
+
+for pair in "${TOPICS[@]}"; do
+  topic=${pair%%:*}
+  table=${pair#*:}
+  # Columns the app sends: everything except job_id (set by Umami's import jobs) and
+  # columns ClickHouse fills itself.
+  where="database = 'umami' AND table = '$table' AND default_kind = '' AND name != 'job_id'"
+  columns=$(ch --format TSVRaw --query "SELECT arrayStringConcat(groupArray(concat(name, ' ', type)), ', ') FROM (SELECT name, type FROM system.columns WHERE $where ORDER BY position)")
+  names=$(ch --format TSVRaw --query "SELECT arrayStringConcat(groupArray(name), ', ') FROM (SELECT name FROM system.columns WHERE $where ORDER BY position)")
+  ch --multiquery <<SQL
+CREATE TABLE IF NOT EXISTS umami.${table}_queue (${columns})
+ENGINE = Kafka
+SETTINGS kafka_broker_list = 'umami-kafka:29092',
+         kafka_topic_list = '${topic}',
+         kafka_group_name = 'umami_${table}',
+         kafka_format = 'JSONEachRow',
+         kafka_skip_broken_messages = 100,
+         input_format_skip_unknown_fields = 1;
+CREATE MATERIALIZED VIEW IF NOT EXISTS umami.${table}_queue_mv TO umami.${table}
+AS SELECT ${names} FROM umami.${table}_queue;
+SQL
+done
+
+# The seed writes to Postgres. In ClickHouse mode each event row carries its session's
+# fields; website_revenue fills itself from event_data through Umami's own view.
+if [ "$(ch --query "SELECT count() FROM umami.website_event")" = "0" ]; then
+  pg() { echo "postgresql('umami-db:5432', 'umami', '$1', 'umami', 'umami')"; }
+  ch --multiquery <<SQL
+SET insert_null_as_default = 1;
+INSERT INTO umami.website_event (website_id, session_id, visit_id, event_id, hostname, browser, os,
+  device, screen, language, country, region, city, url_path, url_query, utm_source, utm_medium,
+  utm_campaign, utm_content, utm_term, referrer_path, referrer_query, referrer_domain, page_title,
+  gclid, fbclid, msclkid, ttclid, li_fat_id, twclid, lcp, inp, cls, fcp, ttfb, event_type,
+  event_name, tag, distinct_id, created_at)
+SELECT e.website_id, e.session_id, e.visit_id, e.event_id, e.hostname, s.browser, s.os, s.device,
+  s.screen, s.language, s.country, s.region, s.city, e.url_path, e.url_query, e.utm_source,
+  e.utm_medium, e.utm_campaign, e.utm_content, e.utm_term, e.referrer_path, e.referrer_query,
+  e.referrer_domain, e.page_title, e.gclid, e.fbclid, e.msclkid, e.ttclid, e.li_fat_id, e.twclid,
+  e.lcp, e.inp, e.cls, e.fcp, e.ttfb, e.event_type, e.event_name, e.tag, s.distinct_id, e.created_at
+FROM $(pg website_event) AS e
+INNER JOIN $(pg session) AS s ON s.session_id = e.session_id;
+
+INSERT INTO umami.event_data (website_id, session_id, event_id, url_path, event_name, data_key,
+  string_value, number_value, date_value, data_type, created_at)
+SELECT d.website_id, e.session_id, d.website_event_id, e.url_path, e.event_name, d.data_key,
+  d.string_value, d.number_value, d.date_value, d.data_type, d.created_at
+FROM $(pg event_data) AS d
+INNER JOIN $(pg website_event) AS e ON e.event_id = d.website_event_id;
+
+INSERT INTO umami.session_data (website_id, session_id, data_key, string_value, number_value,
+  date_value, data_type, distinct_id, created_at)
+SELECT website_id, session_id, data_key, string_value, number_value, date_value, data_type,
+  distinct_id, created_at
+FROM $(pg session_data);
+SQL
+  echo "Copied demo data into ClickHouse: $(ch --query "SELECT count() FROM umami.website_event") events"
+else
+  echo "ClickHouse already has events; skipping the demo data copy"
+fi

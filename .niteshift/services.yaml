@@ -5,6 +5,16 @@ services:
     environment:
       - name: DATABASE_URL
         value: postgresql://umami:umami@localhost:5432/umami
+      # Events are read from ClickHouse, written through Kafka, and sessions and lookups
+      # are cached in Redis. Drop these three to run on Postgres alone.
+      - name: CLICKHOUSE_URL
+        value: http://umami:umami@localhost:8123/umami
+      - name: KAFKA_URL
+        value: kafka://localhost:9092
+      - name: KAFKA_BROKER
+        value: localhost:9092
+      - name: REDIS_URL
+        value: redis://localhost:6379
       - name: APP_SECRET
         value: niteshift-local-dev-secret
       - name: ALLOWED_FRAME_URLS
@@ -22,11 +32,57 @@ services:
       path: /api/auth/dev-login?returnTo={returnTo}
   - name: db
     command: |
+      .niteshift/files/docker-network
       docker rm -f umami-db >/dev/null 2>&1 || true
-      exec docker run --rm --name umami-db \
+      exec docker run --rm --name umami-db --network umami-net \
         -p 127.0.0.1:5432:5432 \
         --shm-size=1g \
         -e POSTGRES_DB=umami -e POSTGRES_USER=umami -e POSTGRES_PASSWORD=umami \
         -v umami-db-data:/var/lib/postgresql/data \
         postgres:15-alpine
     stopGracePeriod: 30s
+  - name: clickhouse
+    command: |
+      .niteshift/files/docker-network
+      docker rm -f umami-clickhouse >/dev/null 2>&1 || true
+      exec docker run --rm --name umami-clickhouse --network umami-net \
+        -p 127.0.0.1:8123:8123 \
+        --ulimit nofile=262144:262144 \
+        -e CLICKHOUSE_DB=umami -e CLICKHOUSE_USER=umami -e CLICKHOUSE_PASSWORD=umami \
+        -v umami-clickhouse-data:/var/lib/clickhouse \
+        clickhouse/clickhouse-server:25.3-alpine
+    stopGracePeriod: 30s
+  - name: kafka
+    # A single KRaft broker. The host listener serves the app on localhost:9092; the
+    # docker listener serves ClickHouse's consumers on umami-kafka:29092.
+    command: |
+      .niteshift/files/docker-network
+      docker rm -f umami-kafka >/dev/null 2>&1 || true
+      exec docker run --rm --name umami-kafka --network umami-net --user root \
+        -p 127.0.0.1:9092:9092 \
+        -e CLUSTER_ID=E-y8f7Q1RYOnwx2DJCdzRQ \
+        -e KAFKA_NODE_ID=1 \
+        -e KAFKA_PROCESS_ROLES=broker,controller \
+        -e KAFKA_CONTROLLER_QUORUM_VOTERS=1@localhost:9093 \
+        -e KAFKA_LISTENERS=HOST://:9092,DOCKER://:29092,CONTROLLER://:9093 \
+        -e KAFKA_ADVERTISED_LISTENERS=HOST://localhost:9092,DOCKER://umami-kafka:29092 \
+        -e KAFKA_LISTENER_SECURITY_PROTOCOL_MAP=HOST:PLAINTEXT,DOCKER:PLAINTEXT,CONTROLLER:PLAINTEXT \
+        -e KAFKA_INTER_BROKER_LISTENER_NAME=DOCKER \
+        -e KAFKA_CONTROLLER_LISTENER_NAMES=CONTROLLER \
+        -e KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR=1 \
+        -e KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR=1 \
+        -e KAFKA_TRANSACTION_STATE_LOG_MIN_ISR=1 \
+        -e KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS=0 \
+        -e KAFKA_LOG_DIRS=/var/lib/kafka/data \
+        -e KAFKA_HEAP_OPTS="-Xms256m -Xmx512m" \
+        -v umami-kafka-data:/var/lib/kafka/data \
+        apache/kafka:3.9.1
+    stopGracePeriod: 30s
+  - name: redis
+    command: |
+      docker rm -f umami-redis >/dev/null 2>&1 || true
+      exec docker run --rm --name umami-redis \
+        -p 127.0.0.1:6379:6379 \
+        -v umami-redis-data:/data \
+        redis:7-alpine redis-server --save 60 1
+    stopGracePeriod: 15s
