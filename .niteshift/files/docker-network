@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+# The stack's containers reach each other by name on this network: ClickHouse consumes
+# from umami-kafka and copies the seeded demo data out of umami-db.
+set -euo pipefail
+
+docker network inspect umami-net >/dev/null 2>&1 \
+  || docker network create umami-net >/dev/null 2>&1 \
+  || docker network inspect umami-net >/dev/null

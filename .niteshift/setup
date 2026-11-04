@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Fresh-sandbox setup for Umami: install, generate the Prisma client, build the
-# tracker/recorder/geo assets, then start Postgres and apply migrations.
+# tracker/recorder/geo assets, start Postgres and apply migrations, seed demo data,
+# then prepare ClickHouse, Kafka and Redis and copy the demo data into ClickHouse.
 set -euo pipefail
 
 cd "$NITESHIFT_CHECKOUT_ROOT/umami"
@@ -23,8 +24,8 @@ pnpm build-recorder
 # GeoLite2 database used for visitor location lookups (geo/ is gitignored)
 pnpm build-geo
 
-# Start the declared Postgres service early so migrations can run now.
-ns services start db
+# Start the declared data services early so migrations and the seed can run now.
+ns services start db clickhouse kafka redis
 for _ in $(seq 1 60); do
   if docker exec umami-db pg_isready -h 127.0.0.1 -U umami -d umami >/dev/null 2>&1; then
     break
@@ -44,3 +45,6 @@ if [ "$demo_sites" = "0" ]; then
 else
   echo "Demo website already present; skipping seed-data"
 fi
+
+# ClickHouse schema, Kafka topics and consumers, and the demo data copied into ClickHouse.
+.niteshift/files/analytics-stack
