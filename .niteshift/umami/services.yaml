@@ -1,0 +1,34 @@
+# NYC Heroes beside Umami (Umami's own services are in ../services.yaml). The game's
+# export is served under /play on port 8060 with Umami's tracker injected, so playing it
+# sends real events to the "NYC Heroes" website in the dashboard (setup creates it).
+#
+#   game         public preview on 8060: files/game-proxy.mjs
+#                  /play/...             the game (game-server), tracker tag added to index.html
+#                  /script.js, /api/send Umami on 3000, same origin so no CORS or preview auth
+#   game-server  the game repo's own preview server (build/web, /tiles from the public site,
+#                /signal to signaling) on internal port 8061
+#   signaling    co-op signaling on 8070, reached through /signal
+#
+# After changing the game, rerun ../nycheroes/.niteshift/files/build-web and reload.
+# Sandbox browsers need software WebGL; see ../nycheroes/.niteshift/services.yaml.
+services:
+  - name: game
+    command: exec node .niteshift/umami/files/game-proxy.mjs
+    port: 8060
+    environment:
+      - name: UMAMI_HOST
+        value: http://localhost:3000
+      - name: GAME_SERVER_URL
+        value: http://localhost:8061
+      - name: NYC_HEROES_WEBSITE_ID
+        value: 6e7c4e70-0000-4000-8000-00000000c0de
+  - name: game-server
+    # PORT is set inline: a service without `port` can't declare it.
+    command: PORT=8061 exec node .niteshift/files/serve-web.mjs
+    cwd: ../nycheroes
+    environment:
+      - name: SIGNALING_PORT
+        value: "8070"
+  - name: signaling
+    command: PORT=8070 exec node server.mjs
+    cwd: ../nycheroes/tools/signaling

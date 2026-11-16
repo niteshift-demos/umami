@@ -18,9 +18,9 @@ services:
       - name: APP_SECRET
         value: niteshift-local-dev-secret
       - name: ALLOWED_FRAME_URLS
-        value: https://niteshift.dev https://*.niteshift.dev
+        value: https://niteshift.dev https://*.niteshift.dev https://niteshift.local https://*.niteshift.local
       - name: ALLOWED_DEV_ORIGINS
-        value: "*.preview.niteshift.dev"
+        value: "*.preview.niteshift.dev,*.preview.niteshift.local"
       - name: DISABLE_TELEMETRY
         value: "1"
       - name: NEXT_TELEMETRY_DISABLED

@@ -1,0 +1,10 @@
+version: 1
+additionalRepositories:
+  - repository: niteshift-demos/nycheroes
+# Umami's own setup and services (../setup, ../services.yaml) plus NYC Heroes, the
+# Godot game used as a real tracker test site, served beside Umami on port 8060.
+scripts:
+  setup: setup
+serviceDefinitions:
+  - ../services.yaml
+  - services.yaml
