@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+# Umami plus NYC Heroes (checked out beside it as ../nycheroes):
+#   1. Umami's setup (.niteshift/setup): install, build assets, Postgres/ClickHouse/Kafka/Redis,
+#      migrations and demo data.
+#   2. The game's own setup (nycheroes/.niteshift/setup): Godot 4.7.2 + web export templates,
+#      signaling packages, citygen venv, and a web export into nycheroes/build/web.
+#   3. A "NYC Heroes" website in Umami with a fixed id, which the game proxy
+#      (files/game-proxy.mjs) puts in the tracker tag it injects into the game page.
+# Safe to rerun: every step skips work already done.
+set -euo pipefail
+
+UMAMI="$NITESHIFT_CHECKOUT_ROOT/umami"
+GAME="$NITESHIFT_CHECKOUT_ROOT/nycheroes"
+# Keep in step with NYC_HEROES_WEBSITE_ID in services.yaml.
+WEBSITE_ID=6e7c4e70-0000-4000-8000-00000000c0de
+
+"$UMAMI/.niteshift/setup"
+"$GAME/.niteshift/setup"
+
+# Owned by the admin user that Umami's first migration creates (admin / umami).
+docker exec -i umami-db psql -v ON_ERROR_STOP=1 -U umami -d umami <<SQL
+INSERT INTO website (website_id, name, domain, user_id, created_by, created_at, updated_at)
+SELECT '$WEBSITE_ID', 'NYC Heroes', 'localhost', user_id, user_id, now(), now()
+FROM "user" WHERE username = 'admin'
+ON CONFLICT (website_id) DO NOTHING;
+SQL
