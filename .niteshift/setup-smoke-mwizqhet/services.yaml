@@ -1,0 +1,23 @@
+# Services added on top of Umami's ../services.yaml for this environment.
+services:
+  # NYC Heroes web build (exported into ../nycheroes/build/web by setup), proxying
+  # city tiles to the public site and /signal to the signaling server below.
+  - name: nycheroes-web
+    command: node .niteshift/files/serve-web.mjs
+    cwd: ../nycheroes
+    port: 8060
+    environment:
+      - name: SIGNALING_PORT
+        value: "8070"
+  - name: nycheroes-signaling
+    command: PORT=8070 exec node server.mjs
+    cwd: ../nycheroes/tools/signaling
+envFiles:
+  # PROD_DATABASE_URL is held back on the user's machine (a remote production
+  # database). Nothing in either repository reads it today; in the sandbox it points
+  # at the local Postgres so nothing can reach production. Next.js loads .env
+  # (gitignored) for the Umami web service.
+  - path: .env
+    environment:
+      - name: PROD_DATABASE_URL
+        value: postgresql://umami:umami@localhost:5432/umami
