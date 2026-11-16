@@ -5,6 +5,10 @@ services:
     environment:
       - name: DATABASE_URL
         value: postgresql://umami:umami@localhost:5432/umami
+      # Held back on the developer's machine (a remote production database). Nothing in
+      # the repo reads it today; it points at the sandbox Postgres so nothing reaches prod.
+      - name: PROD_DATABASE_URL
+        value: postgresql://umami:umami@localhost:5432/umami
       # Events are read from ClickHouse, written through Kafka, and sessions and lookups
       # are cached in Redis. Drop these three to run on Postgres alone.
       - name: CLICKHOUSE_URL
