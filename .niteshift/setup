@@ -21,8 +21,12 @@ pnpm build-db
 pnpm build-tracker-script
 pnpm build-recorder
 
-# GeoLite2 database used for visitor location lookups (geo/ is gitignored)
-pnpm build-geo
+# GeoLite2 database used for visitor location lookups (geo/ is gitignored).
+# Without MAXMIND_LICENSE_KEY the script fetches the public GeoLite2 mirror, so no key
+# is needed. Skipped on warm disks that already have it.
+if [ ! -s geo/GeoLite2-City.mmdb ]; then
+  pnpm build-geo
+fi
 
 # Start the declared data services early so migrations and the seed can run now.
 ns services start db clickhouse kafka redis
