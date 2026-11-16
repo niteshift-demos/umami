@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+# Setup for the setup-smoke environment: Umami (primary) plus the nycheroes checkout.
+# Each repository's own setup does the work and is safe to rerun:
+#   - umami: pnpm install, Prisma, tracker/geo assets, Postgres on 5432 with
+#     migrations and demo seed, then ClickHouse/Kafka/Redis (see ../setup)
+#   - nycheroes: Godot 4.7.2 + web templates, signaling deps, Python venv and a
+#     first web export (see nycheroes/.niteshift/setup)
+set -euo pipefail
+
+"$NITESHIFT_CHECKOUT_ROOT/umami/.niteshift/setup"
+"$NITESHIFT_CHECKOUT_ROOT/nycheroes/.niteshift/setup"

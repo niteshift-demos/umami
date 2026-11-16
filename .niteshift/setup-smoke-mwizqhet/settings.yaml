@@ -1,0 +1,9 @@
+version: 1
+additionalRepositories:
+  - repository: niteshift-demos/nycheroes
+scripts:
+  setup: setup
+serviceDefinitions:
+  # Umami's own manifest first, so its web app (port 3000) is the default preview.
+  - ../services.yaml
+  - services.yaml
