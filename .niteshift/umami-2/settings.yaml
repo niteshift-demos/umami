@@ -1,0 +1,10 @@
+version: 1
+additionalRepositories:
+  - repository: niteshift-demos/nycheroes
+scripts:
+  setup: setup
+serviceDefinitions:
+  # Umami (web) with Postgres, ClickHouse, Kafka and Redis, shared with the default environment.
+  - ../services.yaml
+  # The nycheroes web build as the demo site.
+  - services.yaml

@@ -1,0 +1,16 @@
+services:
+  # The nycheroes game's web build (../nycheroes/build/web, exported by setup), served the way
+  # its own environment serves it: city tiles proxied from https://nycheroes.party/tiles/ and
+  # /signal forwarded to demo-signaling. After changing the game, rerun
+  # ../nycheroes/.niteshift/files/build-web and reload; no restart needed.
+  - name: demo-site
+    command: node .niteshift/files/serve-web.mjs
+    cwd: ../nycheroes
+    port: 8060
+    environment:
+      - name: SIGNALING_PORT
+        value: "8070"
+  # Co-op signaling for the demo site; reached through demo-site's /signal, so no preview.
+  - name: demo-signaling
+    command: PORT=8070 exec node server.mjs
+    cwd: ../nycheroes/tools/signaling

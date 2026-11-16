@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+# Setup for the umami-2 environment: Umami exactly as the default environment sets it up
+# (.niteshift/setup), plus the nycheroes checkout's web build as a demo site.
+set -euo pipefail
+
+"$NITESHIFT_CHECKOUT_ROOT/umami/.niteshift/setup"
+
+# nycheroes ships its own sandbox setup: Godot 4.7.2 with the web export templates, the
+# co-op signaling server's packages, and an export of the game into build/web, which the
+# demo-site service serves. Each step skips work that's already current.
+"$NITESHIFT_CHECKOUT_ROOT/nycheroes/.niteshift/setup"
