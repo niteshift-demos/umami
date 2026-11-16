@@ -1,1 +1,3 @@
 version: 1
+additionalRepositories:
+  - repository: niteshift-demos/nycheroes
