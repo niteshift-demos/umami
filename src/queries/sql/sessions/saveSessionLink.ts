@@ -1,6 +1,6 @@
 import clickhouse from '@/lib/clickhouse';
 import { FIELD_LENGTH } from '@/lib/constants';
-import { CLICKHOUSE, PRISMA, runQuery } from '@/lib/db';
+import { CLICKHOUSE, KAFKA, PRISMA, type QueryWriter, runQuery } from '@/lib/db';
 import { truncateString } from '@/lib/format';
 import kafka from '@/lib/kafka';
 import prisma from '@/lib/prisma';
@@ -17,7 +17,9 @@ export interface SaveSessionLinkArgs {
 export async function saveSessionLink(data: SaveSessionLinkArgs) {
   return runQuery({
     [PRISMA]: () => relationalQuery(data),
-    [CLICKHOUSE]: () => clickhouseQuery(data),
+    [KAFKA]: () => clickhouseQuery(data, message => kafka.sendMessage('session_link', [message])),
+    [CLICKHOUSE]: () =>
+      clickhouseQuery(data, message => clickhouse.insert('session_link', [message])),
   });
 }
 
@@ -55,14 +57,11 @@ async function relationalQuery({
   );
 }
 
-async function clickhouseQuery({
-  websiteId,
-  sessionId,
-  distinctId,
-  createdAt,
-}: SaveSessionLinkArgs) {
-  const { insert, getUTCString } = clickhouse;
-  const { sendMessage } = kafka;
+async function clickhouseQuery(
+  { websiteId, sessionId, distinctId, createdAt }: SaveSessionLinkArgs,
+  write: QueryWriter,
+) {
+  const { getUTCString } = clickhouse;
 
   const message = {
     website_id: websiteId,
@@ -71,9 +70,5 @@ async function clickhouseQuery({
     created_at: getUTCString(createdAt),
   };
 
-  if (kafka.enabled) {
-    await sendMessage('session_link', [message]);
-  } else {
-    await insert('session_link', [message]);
-  }
+  await write(message);
 }

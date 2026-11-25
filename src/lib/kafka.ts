@@ -2,7 +2,7 @@ import type * as tls from 'node:tls';
 import debug from 'debug';
 import { Kafka, logLevel, type Producer, type RecordMetadata, type SASLOptions } from 'kafkajs';
 import { serializeError } from 'serialize-error';
-import { KAFKA, KAFKA_PRODUCER } from '@/lib/db';
+import { isKafkaEnabled, KAFKA, KAFKA_PRODUCER } from '@/lib/db';
 
 const log = debug('umami:kafka');
 const CONNECT_TIMEOUT = 5000;
@@ -12,7 +12,6 @@ const DEFAULT_MAX_MESSAGE_BYTES = 900_000;
 
 let kafka: Kafka;
 let producer: Producer;
-const enabled = Boolean(process.env.KAFKA_URL && process.env.KAFKA_BROKER);
 
 type KafkaMessage = Record<string, unknown>;
 type KafkaProducerMessage = { value: string };
@@ -145,7 +144,7 @@ async function sendMessage(
 
 async function connect(): Promise<Kafka> {
   if (!kafka) {
-    kafka = process.env.KAFKA_URL && process.env.KAFKA_BROKER && (globalThis[KAFKA] || getClient());
+    kafka = isKafkaEnabled() && (globalThis[KAFKA] || getClient());
 
     if (kafka) {
       producer = globalThis[KAFKA_PRODUCER] || (await getProducer());
@@ -156,7 +155,6 @@ async function connect(): Promise<Kafka> {
 }
 
 export default {
-  enabled,
   client: kafka,
   producer,
   log,
