@@ -1,6 +1,6 @@
 import clickhouse from '@/lib/clickhouse';
 import { uuid } from '@/lib/crypto';
-import { CLICKHOUSE, PRISMA, runQuery } from '@/lib/db';
+import { CLICKHOUSE, KAFKA, PRISMA, type QueryWriter, runQuery } from '@/lib/db';
 import kafka from '@/lib/kafka';
 import prisma from '@/lib/prisma';
 
@@ -40,7 +40,10 @@ export async function saveHeatmapEvents(rows: HeatmapEventRow[]) {
 
   return runQuery({
     [PRISMA]: () => relationalQuery(normalizedRows),
-    [CLICKHOUSE]: () => clickhouseQuery(normalizedRows),
+    [KAFKA]: () =>
+      clickhouseQuery(normalizedRows, messages => kafka.sendMessage('heatmap_event', messages)),
+    [CLICKHOUSE]: () =>
+      clickhouseQuery(normalizedRows, messages => clickhouse.insert('heatmap_event', messages)),
   });
 }
 
@@ -79,9 +82,8 @@ async function relationalQuery(rows: HeatmapEventRow[]) {
   });
 }
 
-async function clickhouseQuery(rows: HeatmapEventRow[]) {
-  const { insert, getUTCString } = clickhouse;
-  const { sendMessage } = kafka;
+async function clickhouseQuery(rows: HeatmapEventRow[], write: QueryWriter) {
+  const { getUTCString } = clickhouse;
 
   const messages = rows.map(r => ({
     heatmap_event_id: uuid(),
@@ -102,9 +104,5 @@ async function clickhouseQuery(rows: HeatmapEventRow[]) {
     created_at: getUTCString(r.createdAt),
   }));
 
-  if (kafka.enabled) {
-    return sendMessage('heatmap_event', messages);
-  }
-
-  return insert('heatmap_event', messages);
+  return write(messages);
 }

@@ -52,14 +52,40 @@ describe('runQuery', () => {
     expect(prisma).not.toHaveBeenCalled();
   });
 
-  test('prefers the kafka query over clickhouse when both are provided', async () => {
+  test('defaults to the kafka query when kafka is configured', async () => {
     vi.stubEnv('CLICKHOUSE_URL', 'http://localhost:8123');
+    vi.stubEnv('KAFKA_URL', 'kafka://localhost:9092');
+    vi.stubEnv('KAFKA_BROKER', 'localhost:9092');
     const kafka = vi.fn().mockResolvedValue('kafka-result');
     const clickhouse = vi.fn();
 
     await expect(db.runQuery({ kafka, clickhouse })).resolves.toBe('kafka-result');
     expect(kafka).toHaveBeenCalledTimes(1);
     expect(clickhouse).not.toHaveBeenCalled();
+  });
+
+  test('falls back to the clickhouse query when kafka is not configured', async () => {
+    vi.stubEnv('CLICKHOUSE_URL', 'http://localhost:8123');
+    vi.stubEnv('KAFKA_URL', '');
+    vi.stubEnv('KAFKA_BROKER', '');
+    const kafka = vi.fn();
+    const clickhouse = vi.fn().mockResolvedValue('clickhouse-result');
+
+    await expect(db.runQuery({ kafka, clickhouse })).resolves.toBe('clickhouse-result');
+    expect(kafka).not.toHaveBeenCalled();
+    expect(clickhouse).toHaveBeenCalledTimes(1);
+  });
+
+  test('ignores kafka without clickhouse', async () => {
+    vi.stubEnv('CLICKHOUSE_URL', '');
+    vi.stubEnv('KAFKA_URL', 'kafka://localhost:9092');
+    vi.stubEnv('KAFKA_BROKER', 'localhost:9092');
+    vi.stubEnv('DATABASE_URL', 'postgresql://user:pass@localhost:5432/umami');
+    const kafka = vi.fn();
+    const prisma = vi.fn().mockResolvedValue('prisma-result');
+
+    await expect(db.runQuery({ kafka, prisma })).resolves.toBe('prisma-result');
+    expect(kafka).not.toHaveBeenCalled();
   });
 
   test('runs the prisma query for a postgresql database', async () => {

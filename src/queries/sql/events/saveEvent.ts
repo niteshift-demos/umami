@@ -1,7 +1,7 @@
 import clickhouse from '@/lib/clickhouse';
 import { FIELD_LENGTH } from '@/lib/constants';
 import { uuid } from '@/lib/crypto';
-import { CLICKHOUSE, PRISMA, runQuery } from '@/lib/db';
+import { CLICKHOUSE, KAFKA, PRISMA, type QueryWriter, runQuery } from '@/lib/db';
 import { truncateString } from '@/lib/format';
 import kafka from '@/lib/kafka';
 import prisma from '@/lib/prisma';
@@ -66,7 +66,9 @@ export interface SaveEventArgs {
 export async function saveEvent(args: SaveEventArgs) {
   return runQuery({
     [PRISMA]: () => relationalQuery(args),
-    [CLICKHOUSE]: () => clickhouseQuery(args),
+    [KAFKA]: () => clickhouseQuery(args, message => kafka.sendMessage('event', message)),
+    [CLICKHOUSE]: () =>
+      clickhouseQuery(args, message => clickhouse.insert('website_event', [message])),
   });
 }
 
@@ -168,50 +170,52 @@ async function relationalQuery({
   }
 }
 
-async function clickhouseQuery({
-  websiteId,
-  sessionId,
-  visitId,
-  eventType,
-  createdAt,
-  pageTitle,
-  hostname,
-  urlPath,
-  urlQuery,
-  referrerPath,
-  referrerQuery,
-  referrerDomain,
-  distinctId,
-  browser,
-  os,
-  device,
-  screen,
-  language,
-  country,
-  region,
-  city,
-  eventName,
-  eventData,
-  tag,
-  utmSource,
-  utmMedium,
-  utmCampaign,
-  utmContent,
-  utmTerm,
-  gclid,
-  fbclid,
-  msclkid,
-  ttclid,
-  lifatid,
-  twclid,
-  lcp,
-  inp,
-  cls,
-  fcp,
-  ttfb,
-}: SaveEventArgs) {
-  const { insert, getUTCString } = clickhouse;
-  const { sendMessage } = kafka;
+async function clickhouseQuery(
+  {
+    websiteId,
+    sessionId,
+    visitId,
+    eventType,
+    createdAt,
+    pageTitle,
+    hostname,
+    urlPath,
+    urlQuery,
+    referrerPath,
+    referrerQuery,
+    referrerDomain,
+    distinctId,
+    browser,
+    os,
+    device,
+    screen,
+    language,
+    country,
+    region,
+    city,
+    eventName,
+    eventData,
+    tag,
+    utmSource,
+    utmMedium,
+    utmCampaign,
+    utmContent,
+    utmTerm,
+    gclid,
+    fbclid,
+    msclkid,
+    ttclid,
+    lifatid,
+    twclid,
+    lcp,
+    inp,
+    cls,
+    fcp,
+    ttfb,
+  }: SaveEventArgs,
+  write: QueryWriter,
+) {
+  const { getUTCString } = clickhouse;
   const eventId = uuid();
 
   const message = {
@@ -260,11 +264,7 @@ async function clickhouseQuery({
     ttfb: ttfb,
   };
 
-  if (kafka.enabled) {
-    await sendMessage('event', message);
-  } else {
-    await insert('website_event', [message]);
-  }
+  await write(message);
 
   if (eventData) {
     await saveEventData({

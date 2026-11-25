@@ -1,7 +1,7 @@
 import { gzipSync } from 'node:zlib';
 import clickhouse from '@/lib/clickhouse';
 import { uuid } from '@/lib/crypto';
-import { CLICKHOUSE, PRISMA, runQuery } from '@/lib/db';
+import { CLICKHOUSE, KAFKA, PRISMA, type QueryWriter, runQuery } from '@/lib/db';
 import kafka from '@/lib/kafka';
 import prisma from '@/lib/prisma';
 
@@ -19,7 +19,9 @@ export interface SaveRecordingArgs {
 export async function saveRecording(args: SaveRecordingArgs) {
   return runQuery({
     [PRISMA]: () => relationalQuery(args),
-    [CLICKHOUSE]: () => clickhouseQuery(args),
+    [KAFKA]: () => clickhouseQuery(args, message => kafka.sendMessage('session_replay', message)),
+    [CLICKHOUSE]: () =>
+      clickhouseQuery(args, message => clickhouse.insert('session_replay', [message])),
   });
 }
 
@@ -50,18 +52,20 @@ async function relationalQuery({
   });
 }
 
-async function clickhouseQuery({
-  websiteId,
-  sessionId,
-  visitId,
-  chunkIndex,
-  events,
-  eventCount,
-  startedAt,
-  endedAt,
-}: SaveRecordingArgs) {
-  const { insert, getUTCString } = clickhouse;
-  const { sendMessage } = kafka;
+async function clickhouseQuery(
+  {
+    websiteId,
+    sessionId,
+    visitId,
+    chunkIndex,
+    events,
+    eventCount,
+    startedAt,
+    endedAt,
+  }: SaveRecordingArgs,
+  write: QueryWriter,
+) {
+  const { getUTCString } = clickhouse;
 
   const message = {
     replay_id: uuid(),
@@ -75,9 +79,5 @@ async function clickhouseQuery({
     ended_at: getUTCString(endedAt),
   };
 
-  if (kafka.enabled) {
-    return sendMessage('session_replay', message);
-  }
-
-  return insert('session_replay', [message]);
+  return write(message);
 }
